@@ -67,16 +67,28 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
         """Return device information."""
         data = self.coordinator.data or {}
         mac = data.get("mac")
+        
+        # Используем entry_id и mac как идентификаторы для стабильности
+        identifiers = {(DOMAIN, self._entry.entry_id)}
+        if mac:
+            identifiers.add((DOMAIN, mac))
+            
+        # Формируем красивое имя, если device_name нет
+        device_name = data.get("device_name")
+        if not device_name:
+            device_type = data.get("device_type", "ProW+")
+            device_name = f"Neptun {device_type}"
+            
         info = DeviceInfo(
-            identifiers={(DOMAIN, self._entry.entry_id)},
-            name=data.get("device_name", "Neptun ProW+"),
+            identifiers=identifiers,
+            name=device_name,
             manufacturer="Neptun",
             model=data.get("device_type", "ProW+"),
             sw_version=data.get("version"),
         )
         if mac:
             info["connections"] = {(CONNECTION_NETWORK_MAC, mac)}
-            info["serial_number"] = mac  # используем MAC как серийный номер
+            info["serial_number"] = mac
         return info
 
     @property

@@ -251,8 +251,9 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     device["device_type"] = payload[:2].decode(
                         "ascii", errors="ignore"
                     )
+                    # Байты версии передаются как ASCII-символы (0x32 = '2')
                     device["version"] = (
-                        f"{payload[2]}.{payload[3]}.{payload[4]}"
+                        f"{payload[2] - 0x30}.{payload[3] - 0x30}.{payload[4] - 0x30}"
                     )
                     self._log_decoded(
                         "device_info",
