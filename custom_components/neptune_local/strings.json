@@ -6,7 +6,8 @@
         "description": "Configure the local connection to your Neptun ProW+ controller.",
         "data": {
           "host": "IP address of the Neptun controller",
-          "scan_interval": "Polling interval (seconds)"
+          "scan_interval": "Polling interval (seconds)",
+          "debug": "Enable debug logging (raw + decoded packets)"
         }
       }
     },
@@ -22,10 +23,11 @@
     "step": {
       "init": {
         "title": "Neptun Local options",
-        "description": "Adjust the IP address or polling interval.",
+        "description": "Adjust the IP address, polling interval or debug logging.",
         "data": {
           "host": "IP address of the Neptun controller",
-          "scan_interval": "Polling interval (seconds)"
+          "scan_interval": "Polling interval (seconds)",
+          "debug": "Enable debug logging (raw + decoded packets)"
         }
       }
     }

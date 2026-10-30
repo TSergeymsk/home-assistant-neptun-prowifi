@@ -4,11 +4,19 @@ DOMAIN = "neptun_local"
 
 CONF_HOST = "host"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_DEBUG = "debug"
 
 DEFAULT_PORT = 6350
-DEFAULT_SCAN_INTERVAL = 120  # seconds, matching the original project[reference:1]
+DEFAULT_SCAN_INTERVAL = 120  # seconds
+DEFAULT_DEBUG = False
 
-# Packet types from neptun.py[reference:2]
+# Resilience
+SOCKET_TIMEOUT = 8            # seconds per socket operation
+RETRY_ATTEMPTS_PER_CYCLE = 2  # attempts inside one update cycle
+RETRY_DELAY = 8               # seconds between attempts inside a cycle
+MAX_CONSECUTIVE_FAILURES = 3  # cycles before entities become Unavailable
+
+# Packet types from neptun.py
 PACKET_WHOIS = 0x49
 PACKET_SYSTEM_STATE = 0x52
 PACKET_COUNTER_NAME = 0x63

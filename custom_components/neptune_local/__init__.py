@@ -24,13 +24,16 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Neptun Local from a config entry."""
     coordinator = NeptunCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+
+    # Use async_refresh() (not async_config_entry_first_refresh) so that
+    # setup succeeds even if the controller is temporarily unreachable
+    # (e.g. because the SST cloud is holding the TCP connection).
+    await coordinator.async_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register update listener for options changes
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     return True
