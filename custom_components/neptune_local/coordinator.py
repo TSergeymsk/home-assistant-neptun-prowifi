@@ -136,7 +136,6 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         sock = self._connect()
         try:
             device: dict[str, Any] = {"lines": {}}
-            # Запрашиваем ТОЛЬКО 0x52 - он содержит все данные.
             raw = self._request(sock, self._build_packet(PACKET_SYSTEM_STATE))
             self._parse_system_state(raw, device)
             return device
@@ -164,30 +163,23 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             tag_size = (data[offset] << 8) | data[offset + 1]
             offset += 2
 
-            # Проверка, чтобы не выйти за границы пакета
+            # Защита от выхода за границы пакета
             if offset + tag_size > data_len:
                 self._log_decoded(f"tag_0x{tag:02x}", "size exceeds packet length")
                 break
 
-            if tag == 0x49:  # Device Info (Name, MAC, Version)
-                offset2 = offset
-                name_size = tag_size
-                device['device_name'] = data[offset2:offset2+name_size].decode('utf-8', errors='ignore')
-                offset2 += name_size
+            if tag == 0x49:  # Device Name
+                device['device_name'] = data[offset:offset+tag_size].decode('utf-8', errors='ignore')
+                self._log_decoded("device_info.name", device['device_name'])
+            
+            elif tag == 0x4d:  # MAC Address
+                device['mac'] = data[offset:offset+tag_size].decode('utf-8', errors='ignore')
+                self._log_decoded("device_info.mac", device['mac'])
                 
-                mac_size = (data[offset2] << 8) | data[offset2 + 1]
-                offset2 += 2
-                device['mac'] = data[offset2:offset2+mac_size].decode('utf-8', errors='ignore')
-                offset2 += mac_size
-                
-                ver_size = (data[offset2] << 8) | data[offset2 + 1]
-                offset2 += 2
-                device['version'] = data[offset2:offset2+ver_size].decode('utf-8', errors='ignore')
-                offset2 += ver_size
-                
-                offset = offset2  # Перескакиваем весь сложный тег
-                self._log_decoded("device_info", f"{device['device_name']} / {device['mac']} / {device['version']}")
-                continue
+            elif tag == 0x00:  # Version
+                if tag_size > 0:
+                    device['version'] = data[offset]
+                    self._log_decoded("device_info.version", device['version'])
 
             elif tag == 0x53:  # Main State
                 if tag_size >= 7:
@@ -229,11 +221,8 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 device["counter_name"] = name_str
                 self._log_decoded("counter_name", name_str)
 
-            elif tag == 0x4c:
-                # Какая-то служебная информация (возможно, реле)
-                pass
-            elif tag == 0x57:
-                # Настройки
+            elif tag in (0x57, 0x4c):
+                # Служебные теги (настройки, реле и т.д.)
                 pass
             else:
                 self._log_decoded(f"unknown_tag_0x{tag:02x}", data[offset:offset+tag_size].hex(" "))
