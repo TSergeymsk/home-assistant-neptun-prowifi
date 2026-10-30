@@ -67,11 +67,12 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
         """Return device information."""
         data = self.coordinator.data or {}
         mac = data.get("mac")
-        
-        # Формируем стабильный набор идентификаторов.
-        # Используем MAC как в identifiers, так и в connections.
+
+        # Формируем стабильный набор идентификаторов на основе MAC-адреса.
+        # Отсутствие volatile-идентификаторов (например, IP) предотвращает
+        # появление дубликатов устройств в реестре HA.
         identifiers = {(DOMAIN, mac)} if mac else {(DOMAIN, self._entry.entry_id)}
-        
+
         info = DeviceInfo(
             identifiers=identifiers,
             name=data.get("device_name") or f"Neptun {data.get('device_type', 'ProW+')}",
