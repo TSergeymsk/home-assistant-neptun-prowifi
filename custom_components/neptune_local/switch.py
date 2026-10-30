@@ -23,7 +23,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Neptun switches."""
     coordinator: NeptunCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SwitchEntity] = [
+    entities = [
         NeptunMainValveSwitch(coordinator, entry),
         NeptunCleaningModeSwitch(coordinator, entry),
     ]
@@ -46,21 +46,16 @@ class NeptunBaseSwitch(CoordinatorEntity[NeptunCoordinator], SwitchEntity):
         """Return device information."""
         data = self.coordinator.data or {}
         mac = data.get("mac")
-        
-        identifiers = {(DOMAIN, self._entry.entry_id)}
-        connections = set()
-        if mac:
-            connections.add((CONNECTION_NETWORK_MAC, mac))
 
         info = DeviceInfo(
-            identifiers=identifiers,
-            connections=connections,
+            identifiers={(DOMAIN, self._entry.entry_id)},
             name="Neptun ProW+",
             manufacturer="Neptun",
             model="ProW+",
             sw_version=data.get("version"),
         )
         if mac:
+            info["connections"] = {(CONNECTION_NETWORK_MAC, mac)}
             info["serial_number"] = mac
         return info
 
@@ -68,8 +63,10 @@ class NeptunBaseSwitch(CoordinatorEntity[NeptunCoordinator], SwitchEntity):
     def available(self) -> bool:
         return self.coordinator.last_update_success
 
+
 class NeptunMainValveSwitch(NeptunBaseSwitch):
     _attr_icon = "mdi:valve"
+    
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "main_valve", "Main valve")
 
@@ -83,8 +80,10 @@ class NeptunMainValveSwitch(NeptunBaseSwitch):
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_valve(False)
 
+
 class NeptunCleaningModeSwitch(NeptunBaseSwitch):
     _attr_icon = "mdi:water-pump"
+    
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "cleaning_mode", "Cleaning mode")
 

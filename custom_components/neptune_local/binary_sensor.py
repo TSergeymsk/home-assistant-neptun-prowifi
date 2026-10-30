@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -23,7 +23,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up Neptun binary sensors."""
     coordinator: NeptunCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[BinarySensorEntity] = [
+    
+    entities = [
         NeptunAlarmBinarySensor(coordinator, entry),
         NeptunLeak1BinarySensor(coordinator, entry),
         NeptunLeak2BinarySensor(coordinator, entry),
@@ -49,21 +50,16 @@ class NeptunBaseBinarySensor(CoordinatorEntity[NeptunCoordinator], BinarySensorE
         """Return device information."""
         data = self.coordinator.data or {}
         mac = data.get("mac")
-        
-        identifiers = {(DOMAIN, self._entry.entry_id)}
-        connections = set()
-        if mac:
-            connections.add((CONNECTION_NETWORK_MAC, mac))
 
         info = DeviceInfo(
-            identifiers=identifiers,
-            connections=connections,
+            identifiers={(DOMAIN, self._entry.entry_id)},
             name="Neptun ProW+",
             manufacturer="Neptun",
             model="ProW+",
             sw_version=data.get("version"),
         )
         if mac:
+            info["connections"] = {(CONNECTION_NETWORK_MAC, mac)}
             info["serial_number"] = mac
         return info
 
@@ -71,24 +67,63 @@ class NeptunBaseBinarySensor(CoordinatorEntity[NeptunCoordinator], BinarySensorE
     def available(self) -> bool:
         return self.coordinator.last_update_success
 
-# Реализация конкретных бинарных сенсоров (пример)
+
 class NeptunAlarmBinarySensor(NeptunBaseBinarySensor):
     _attr_icon = "mdi:alarm-light"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "alarm", "Alarm")
 
     @property
     def is_on(self) -> bool:
         status = self.coordinator.data.get("status", 0)
-        return bool(status & 0x01)  # флаг ALARM
+        return bool(status & 0x01)
+
 
 class NeptunLeak1BinarySensor(NeptunBaseBinarySensor):
     _attr_icon = "mdi:water-alert"
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "leak1", "Leak line 1")
 
     @property
     def is_on(self) -> bool:
-        line = self.coordinator.data.get("lines", {}).get("line0", {})
-        # Логика определения протечки для линии 1
-        return line.get("state") == 1 
+        return self.coordinator.data.get("lines", {}).get("line0", {}).get("state") == 1
+
+
+class NeptunLeak2BinarySensor(NeptunBaseBinarySensor):
+    _attr_icon = "mdi:water-alert"
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "leak2", "Leak line 2")
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.data.get("lines", {}).get("line1", {}).get("state") == 1
+
+
+class NeptunLeak3BinarySensor(NeptunBaseBinarySensor):
+    _attr_icon = "mdi:water-alert"
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "leak3", "Leak line 3")
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.data.get("lines", {}).get("line2", {}).get("state") == 1
+
+
+class NeptunLeak4BinarySensor(NeptunBaseBinarySensor):
+    _attr_icon = "mdi:water-alert"
+    _attr_device_class = BinarySensorDeviceClass.MOISTURE
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "leak4", "Leak line 4")
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.data.get("lines", {}).get("line3", {}).get("state") == 1

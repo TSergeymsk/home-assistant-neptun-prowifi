@@ -68,8 +68,6 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
         data = self.coordinator.data or {}
         mac = data.get("mac")
 
-        # Жестко задаем имя и модель, а identifiers привязываем только к entry_id.
-        # Это гарантирует, что все сущности этой записи конфигурации попадут в 1 устройство.
         info = DeviceInfo(
             identifiers={(DOMAIN, self._entry.entry_id)},
             name="Neptun ProW+",
@@ -88,115 +86,69 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
 
 
 class NeptunStatusSensor(NeptunBaseSensor):
-    """Overall system status sensor."""
-
     _attr_icon = "mdi:shield-check"
-
-    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "status", "Status")
-
     @property
     def native_value(self) -> str | None:
         return self.coordinator.data.get("status_name")
 
-
 class NeptunValveSensor(NeptunBaseSensor):
-    """Main valve state sensor."""
-
     _attr_icon = "mdi:valve"
-
-    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "valve_state", "Valve state")
-
     @property
     def native_value(self) -> str | None:
         return "open" if self.coordinator.data.get("valve_state_open") else "closed"
 
-
 class NeptunSensorCountSensor(NeptunBaseSensor):
-    """Wireless sensor count."""
-
     _attr_icon = "mdi:access-point"
     _attr_native_unit_of_measurement = "pcs"
-
-    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "sensor_count", "Wireless sensors")
-
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.get("sensor_count")
 
-
 class NeptunRelayCountSensor(NeptunBaseSensor):
-    """Relay count."""
-
     _attr_icon = "mdi:electric-switch"
     _attr_native_unit_of_measurement = "pcs"
-
-    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "relay_count", "Relays")
-
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.get("relay_count")
 
-
 class NeptunCounterSensor(NeptunBaseSensor):
-    """Counter value for a wired line."""
-
     _attr_icon = "mdi:counter"
     _attr_state_class = SensorDeviceClass.WATER
     _attr_native_unit_of_measurement = "m³"
-
-    def __init__(
-        self, coordinator: NeptunCoordinator, entry: ConfigEntry, line_id: str
-    ) -> None:
-        super().__init__(
-            coordinator, entry, f"{line_id}_value", f"{line_id.capitalize()} counter"
-        )
+    def __init__(self, coordinator, entry, line_id):
+        super().__init__(coordinator, entry, f"{line_id}_value", f"{line_id.capitalize()} counter")
         self._line_id = line_id
-
     @property
     def native_value(self) -> int | None:
         line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
         return line.get("value")
 
-
 class NeptunSignalSensor(NeptunBaseSensor):
-    """Signal level for a wireless sensor."""
-
     _attr_icon = "mdi:signal"
     _attr_native_unit_of_measurement = "dB"
-
-    def __init__(
-        self, coordinator: NeptunCoordinator, entry: ConfigEntry, line_id: str
-    ) -> None:
-        super().__init__(
-            coordinator, entry, f"{line_id}_signal", f"{line_id.capitalize()} signal"
-        )
+    def __init__(self, coordinator, entry, line_id):
+        super().__init__(coordinator, entry, f"{line_id}_signal", f"{line_id.capitalize()} signal")
         self._line_id = line_id
-
     @property
     def native_value(self) -> int | None:
         line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
         return line.get("signal")
 
-
 class NeptunBatterySensor(NeptunBaseSensor):
-    """Battery level for a wireless sensor."""
-
     _attr_icon = "mdi:battery"
     _attr_native_unit_of_measurement = "%"
     _attr_device_class = SensorDeviceClass.BATTERY
-
-    def __init__(
-        self, coordinator: NeptunCoordinator, entry: ConfigEntry, line_id: str
-    ) -> None:
-        super().__init__(
-            coordinator, entry, f"{line_id}_battery", f"{line_id.capitalize()} battery"
-        )
+    def __init__(self, coordinator, entry, line_id):
+        super().__init__(coordinator, entry, f"{line_id}_battery", f"{line_id.capitalize()} battery")
         self._line_id = line_id
-
     @property
     def native_value(self) -> int | None:
         line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
