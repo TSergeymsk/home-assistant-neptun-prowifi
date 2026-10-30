@@ -23,19 +23,11 @@ async def async_setup_entry(
     """Set up Neptun binary sensors from a config entry."""
     coordinator: NeptunCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = [
-        NeptunAlarmSensor(coordinator),
-        NeptunLeakSensor(coordinator, "line0"),
-        NeptunLeakSensor(coordinator, "line1"),
-        NeptunLeakSensor(coordinator, "line2"),
-        NeptunLeakSensor(coordinator, "line3"),
-    ]
+    entities = [NeptunAlarmSensor(coordinator)]
 
-    # Add leak sensors for wireless lines
     if coordinator.data:
         for line_id in coordinator.data.get("lines", {}):
-            if line_id.startswith("line") and line_id not in {"line0", "line1", "line2", "line3"}:
-                entities.append(NeptunLeakSensor(coordinator, line_id))
+            entities.append(NeptunLeakSensor(coordinator, line_id))
 
     async_add_entities(entities)
 
@@ -55,7 +47,7 @@ class NeptunAlarmSensor(NeptunEntity, BinarySensorEntity):
         if self.coordinator.data is None:
             return False
         status = self.coordinator.data.get("status", 0)
-        return bool(status & 0x01)  # ALARM bit[reference:14]
+        return bool(status & 0x01)  # ALARM bit
 
 
 class NeptunLeakSensor(NeptunEntity, BinarySensorEntity):
@@ -66,8 +58,14 @@ class NeptunLeakSensor(NeptunEntity, BinarySensorEntity):
     def __init__(self, coordinator: NeptunCoordinator, line_id: str) -> None:
         super().__init__(coordinator, f"{line_id}_leak")
         self._line_id = line_id
-        line_name = coordinator.data.get("lines", {}).get(line_id, {}).get("name", line_id) if coordinator.data else line_id
-        self._attr_name = f"{line_name} leak"
+        
+        # Делаем имена красивее: line0 -> Leak line 1, line4 -> Leak line 5
+        display_num = line_id.replace("line", "")
+        try:
+            display_num = str(int(display_num) + 1)
+        except ValueError:
+            pass
+        self._attr_name = f"Leak line {display_num}"
 
     @property
     def is_on(self) -> bool:
@@ -75,6 +73,10 @@ class NeptunLeakSensor(NeptunEntity, BinarySensorEntity):
         if self.coordinator.data is None:
             return False
         line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
-        # For wired sensors, state is a bitmask; for wireless, state byte directly indicates leak
         state = line.get("state", 0)
-        return bool(state & 0x01) if line.get("wire") else bool(state)
+        
+        # Для проводных датчиков (wire=True) бит 0x01 означает протечку.
+        # Для беспроводных (wire=False) ненулевое состояние означает протечку.
+        if line.get("wire"):
+            return bool(state & 0x01)
+        return bool(state)
