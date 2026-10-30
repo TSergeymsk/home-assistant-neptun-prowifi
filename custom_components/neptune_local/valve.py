@@ -54,7 +54,6 @@ class NeptunBaseValve(CoordinatorEntity[NeptunCoordinator], ValveEntity):
         data = self.coordinator.data or {}
         mac = data.get("mac")
 
-        # Единый идентификатор для привязки к одному устройству
         info = DeviceInfo(
             identifiers={(DOMAIN, self._entry.entry_id)},
             name="Neptun ProW+",
@@ -77,6 +76,7 @@ class NeptunMainValve(NeptunBaseValve):
 
     _attr_device_class = ValveDeviceClass.WATER
     _attr_supported_features = ValveEntityFeature.OPEN | ValveEntityFeature.CLOSE
+    _attr_reports_position = False  # <-- Критически важный атрибут
 
     def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "main_valve_entity", "Main valve")
