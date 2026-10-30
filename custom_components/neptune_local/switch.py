@@ -23,8 +23,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up Neptun switches."""
     coordinator: NeptunCoordinator = hass.data[DOMAIN][entry.entry_id]
+    
+    # Оставляем только режим очистки, клапан переносим в valve.py
     entities = [
-        NeptunMainValveSwitch(coordinator, entry),
         NeptunCleaningModeSwitch(coordinator, entry),
     ]
     async_add_entities(entities, update_before_add=True)
