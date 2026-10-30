@@ -51,7 +51,6 @@ class NeptunConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            # Здесь можно добавить проверку подключения, если нужно
             return self.async_create_entry(
                 title=f"Neptun {user_input[CONF_HOST]}", data=user_input
             )
@@ -66,15 +65,11 @@ class NeptunConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        return NeptunOptionsFlow(config_entry)
+        return NeptunOptionsFlow()
 
 
 class NeptunOptionsFlow(config_entries.OptionsFlow):
     """Neptun Local options flow."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

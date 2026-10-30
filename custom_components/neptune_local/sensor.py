@@ -68,20 +68,11 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
         data = self.coordinator.data or {}
         mac = data.get("mac")
         
-        # Используем entry_id и mac как идентификаторы для стабильности
-        identifiers = {(DOMAIN, self._entry.entry_id)}
-        if mac:
-            identifiers.add((DOMAIN, mac))
-            
-        # Формируем красивое имя, если device_name нет
-        device_name = data.get("device_name")
-        if not device_name:
-            device_type = data.get("device_type", "ProW+")
-            device_name = f"Neptun {device_type}"
-            
+        # Используем ТОЛЬКО MAC-адрес в connections для стабильной идентификации.
+        # identifiers оставляем пустым, чтобы не создавать конфликтов.
         info = DeviceInfo(
-            identifiers=identifiers,
-            name=device_name,
+            identifiers=set(),  # явно пустой set
+            name=data.get("device_name") or f"Neptun {data.get('device_type', 'ProW+')}",
             manufacturer="Neptun",
             model=data.get("device_type", "ProW+"),
             sw_version=data.get("version"),
