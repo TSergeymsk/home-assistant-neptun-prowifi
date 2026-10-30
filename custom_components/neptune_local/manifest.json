@@ -1,13 +1,13 @@
 {
   "domain": "neptun_local",
   "name": "Neptun Local",
-  "codeowners": ["@your_username"],
+  "codeowners": ["@TSergeymsk"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/your_username/neptun_local",
+  "documentation": "https://github.com/TSergeymsk/home-assistant-neptun-prowifi",
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/your_username/neptun_local/issues",
+  "issue_tracker": "https://github.com/TSergeymsk/home-assistant-neptun-prowifi/issues",
   "requirements": [],
   "version": "1.0.0"
 }
