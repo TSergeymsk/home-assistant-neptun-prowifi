@@ -68,9 +68,10 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
         data = self.coordinator.data or {}
         mac = data.get("mac")
 
-        # Всегда используем entry_id в identifiers для стабильной привязки
-        # к записи конфигурации. MAC добавляем в connections.
+        # Всегда используем entry_id для identifiers (стабильная привязка)
         identifiers = {(DOMAIN, self._entry.entry_id)}
+        
+        # MAC-адрес добавляем в connections (если он есть)
         connections = set()
         if mac:
             connections.add((CONNECTION_NETWORK_MAC, mac))
@@ -78,13 +79,13 @@ class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
         info = DeviceInfo(
             identifiers=identifiers,
             connections=connections,
-            name=data.get("device_name") or f"Neptun {data.get('device_type', 'ProW+')}",
+            name="Neptun ProW+",           # Жестко заданное имя
             manufacturer="Neptun",
-            model=data.get("device_type", "ProW+"),
+            model="ProW+",                 # Жестко заданная модель
             sw_version=data.get("version"),
         )
         if mac:
-            info["serial_number"] = mac
+            info["serial_number"] = mac    # Серийный номер = MAC
         return info
 
     @property

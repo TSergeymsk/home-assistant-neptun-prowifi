@@ -1,82 +1,94 @@
 """Binary sensor platform for Neptun Local."""
-
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-)
+import logging
+from typing import Any
+
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.device_registry import DeviceInfo, CONNECTION_NETWORK_MAC
 
 from .const import DOMAIN
 from .coordinator import NeptunCoordinator
-from .entity import NeptunEntity
 
+_LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Neptun binary sensors from a config entry."""
+    """Set up Neptun binary sensors."""
     coordinator: NeptunCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entities: list[BinarySensorEntity] = [
+        NeptunAlarmBinarySensor(coordinator, entry),
+        NeptunLeak1BinarySensor(coordinator, entry),
+        NeptunLeak2BinarySensor(coordinator, entry),
+        NeptunLeak3BinarySensor(coordinator, entry),
+        NeptunLeak4BinarySensor(coordinator, entry),
+    ]
+    async_add_entities(entities, update_before_add=True)
 
-    entities = [NeptunAlarmSensor(coordinator)]
 
-    if coordinator.data:
-        for line_id in coordinator.data.get("lines", {}):
-            entities.append(NeptunLeakSensor(coordinator, line_id))
+class NeptunBaseBinarySensor(CoordinatorEntity[NeptunCoordinator], BinarySensorEntity):
+    """Base class for Neptun binary sensors."""
+    _attr_has_entity_name = True
 
-    async_add_entities(entities)
+    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry, key: str, name: str) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        self._key = key
+        self._attr_name = name
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
 
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        data = self.coordinator.data or {}
+        mac = data.get("mac")
+        
+        identifiers = {(DOMAIN, self._entry.entry_id)}
+        connections = set()
+        if mac:
+            connections.add((CONNECTION_NETWORK_MAC, mac))
 
-class NeptunAlarmSensor(NeptunEntity, BinarySensorEntity):
-    """Overall alarm sensor."""
+        info = DeviceInfo(
+            identifiers=identifiers,
+            connections=connections,
+            name="Neptun ProW+",
+            manufacturer="Neptun",
+            model="ProW+",
+            sw_version=data.get("version"),
+        )
+        if mac:
+            info["serial_number"] = mac
+        return info
 
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_name = "Alarm"
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success
 
-    def __init__(self, coordinator: NeptunCoordinator) -> None:
-        super().__init__(coordinator, "alarm")
+# Реализация конкретных бинарных сенсоров (пример)
+class NeptunAlarmBinarySensor(NeptunBaseBinarySensor):
+    _attr_icon = "mdi:alarm-light"
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "alarm", "Alarm")
 
     @property
     def is_on(self) -> bool:
-        """Return true if there is an alarm."""
-        if self.coordinator.data is None:
-            return False
         status = self.coordinator.data.get("status", 0)
-        return bool(status & 0x01)  # ALARM bit
+        return bool(status & 0x01)  # флаг ALARM
 
-
-class NeptunLeakSensor(NeptunEntity, BinarySensorEntity):
-    """Leak sensor for a specific line."""
-
-    _attr_device_class = BinarySensorDeviceClass.MOISTURE
-
-    def __init__(self, coordinator: NeptunCoordinator, line_id: str) -> None:
-        super().__init__(coordinator, f"{line_id}_leak")
-        self._line_id = line_id
-        
-        # Делаем имена красивее: line0 -> Leak line 1, line4 -> Leak line 5
-        display_num = line_id.replace("line", "")
-        try:
-            display_num = str(int(display_num) + 1)
-        except ValueError:
-            pass
-        self._attr_name = f"Leak line {display_num}"
+class NeptunLeak1BinarySensor(NeptunBaseBinarySensor):
+    _attr_icon = "mdi:water-alert"
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "leak1", "Leak line 1")
 
     @property
     def is_on(self) -> bool:
-        """Return true if the line reports a leak."""
-        if self.coordinator.data is None:
-            return False
-        line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
-        state = line.get("state", 0)
-        
-        # Для проводных датчиков (wire=True) бит 0x01 означает протечку.
-        # Для беспроводных (wire=False) ненулевое состояние означает протечку.
-        if line.get("wire"):
-            return bool(state & 0x01)
-        return bool(state)
+        line = self.coordinator.data.get("lines", {}).get("line0", {})
+        # Логика определения протечки для линии 1
+        return line.get("state") == 1 
