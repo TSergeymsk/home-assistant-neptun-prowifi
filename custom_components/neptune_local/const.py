@@ -1,0 +1,25 @@
+"""Constants for the Neptun Local integration."""
+
+DOMAIN = "neptun_local"
+
+CONF_HOST = "host"
+CONF_SCAN_INTERVAL = "scan_interval"
+
+DEFAULT_PORT = 6350
+DEFAULT_SCAN_INTERVAL = 120  # seconds, matching the original project[reference:1]
+
+# Packet types from neptun.py[reference:2]
+PACKET_WHOIS = 0x49
+PACKET_SYSTEM_STATE = 0x52
+PACKET_COUNTER_NAME = 0x63
+PACKET_COUNTER_STATE = 0x43
+PACKET_SENSOR_NAME = 0x4E
+PACKET_SENSOR_STATE = 0x53
+PACKET_BACK_STATE = 0x42
+PACKET_RECONNECT = 0x57
+PACKET_SET_SYSTEM_STATE = 0x57
+
+BROADCAST_PORT = 6350
+BROADCAST_ADDRESS = "255.255.255.255"
+SERVER_PORT = 6350
+SOCKET_BUFSIZE = 1024
