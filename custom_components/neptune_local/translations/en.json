@@ -3,31 +3,29 @@
     "step": {
       "user": {
         "title": "Neptun Local",
-        "description": "Configure the local connection to your Neptun ProW+ controller.",
+        "description": "Configure your Neptun ProW+ controller.",
         "data": {
           "host": "IP address of the Neptun controller",
           "scan_interval": "Polling interval (seconds)",
-          "debug": "Enable debug logging (raw + decoded packets)"
+          "debug": "Enable debug logging",
+          "retry_attempts": "Number of attempts per polling cycle",
+          "retry_delay": "Delay between attempts (seconds)",
+          "max_consecutive_failures": "Failures before entities become unavailable"
         }
       }
-    },
-    "error": {
-      "cannot_connect": "Failed to connect to the Neptun controller",
-      "unknown": "Unexpected error"
-    },
-    "abort": {
-      "already_configured": "This Neptun controller is already configured"
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Neptun Local options",
-        "description": "Adjust the IP address, polling interval or debug logging.",
+        "description": "Adjust polling and retry settings.",
         "data": {
-          "host": "IP address of the Neptun controller",
           "scan_interval": "Polling interval (seconds)",
-          "debug": "Enable debug logging (raw + decoded packets)"
+          "debug": "Enable debug logging",
+          "retry_attempts": "Number of attempts per polling cycle",
+          "retry_delay": "Delay between attempts (seconds)",
+          "max_consecutive_failures": "Failures before entities become unavailable"
         }
       }
     }

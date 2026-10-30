@@ -1,115 +1,116 @@
 """Config flow for Neptun Local integration."""
-
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import (
-    ConfigEntry,
-    ConfigFlow,
-    ConfigFlowResult,
-    OptionsFlow,
-)
-from homeassistant.const import CONF_HOST
+from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
+import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN,
+    CONF_HOST,
     CONF_SCAN_INTERVAL,
     CONF_DEBUG,
+    CONF_RETRY_ATTEMPTS,
+    CONF_RETRY_DELAY,
+    CONF_MAX_CONSECUTIVE_FAILURES,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_DEBUG,
+    DEFAULT_RETRY_ATTEMPTS,
+    DEFAULT_RETRY_DELAY,
+    DEFAULT_MAX_CONSECUTIVE_FAILURES,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
+        vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): cv.positive_int,
         vol.Optional(CONF_DEBUG, default=DEFAULT_DEBUG): bool,
+        vol.Optional(CONF_RETRY_ATTEMPTS, default=DEFAULT_RETRY_ATTEMPTS): cv.positive_int,
+        vol.Optional(CONF_RETRY_DELAY, default=DEFAULT_RETRY_DELAY): cv.positive_int,
+        vol.Optional(CONF_MAX_CONSECUTIVE_FAILURES, default=DEFAULT_MAX_CONSECUTIVE_FAILURES): cv.positive_int,
     }
 )
 
 
-class NeptunConfigFlow(ConfigFlow, domain=DOMAIN):
+class NeptunConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Neptun Local."""
 
     VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Handle the initial step."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            await self.async_set_unique_id(user_input[CONF_HOST])
-            self._abort_if_unique_id_configured()
+            # Здесь можно добавить проверку подключения, если нужно
             return self.async_create_entry(
-                title="Neptun ProW+",
-                data={CONF_HOST: user_input[CONF_HOST]},
-                options={
-                    CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
-                    CONF_DEBUG: user_input.get(CONF_DEBUG, DEFAULT_DEBUG),
-                },
+                title=f"Neptun {user_input[CONF_HOST]}", data=user_input
             )
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=STEP_USER_DATA_SCHEMA,
+            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        return NeptunOptionsFlow()
+        return NeptunOptionsFlow(config_entry)
 
 
-class NeptunOptionsFlow(OptionsFlow):
-    """Handle options flow for Neptun Local."""
+class NeptunOptionsFlow(config_entries.OptionsFlow):
+    """Neptun Local options flow."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            host = user_input[CONF_HOST]
+            return self.async_create_entry(title="", data=user_input)
 
-            # Host lives in entry.data (coordinator reads it from there).
-            if host != self.config_entry.data.get(CONF_HOST):
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data={**self.config_entry.data, CONF_HOST: host},
-                )
-
-            # scan_interval and debug live in entry.options.
-            return self.async_create_entry(
-                data={
-                    CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
-                    CONF_DEBUG: user_input[CONF_DEBUG],
-                }
-            )
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_HOST,
-                        default=self.config_entry.data.get(CONF_HOST),
-                    ): str,
-                    vol.Optional(
-                        CONF_SCAN_INTERVAL,
-                        default=self.config_entry.options.get(
-                            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-                        ),
-                    ): int,
-                    vol.Optional(
-                        CONF_DEBUG,
-                        default=self.config_entry.options.get(
-                            CONF_DEBUG, DEFAULT_DEBUG
-                        ),
-                    ): bool,
-                }
-            ),
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_SCAN_INTERVAL,
+                    default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                ): cv.positive_int,
+                vol.Optional(
+                    CONF_DEBUG, default=options.get(CONF_DEBUG, DEFAULT_DEBUG)
+                ): bool,
+                vol.Optional(
+                    CONF_RETRY_ATTEMPTS,
+                    default=options.get(
+                        CONF_RETRY_ATTEMPTS, DEFAULT_RETRY_ATTEMPTS
+                    ),
+                ): cv.positive_int,
+                vol.Optional(
+                    CONF_RETRY_DELAY,
+                    default=options.get(CONF_RETRY_DELAY, DEFAULT_RETRY_DELAY),
+                ): cv.positive_int,
+                vol.Optional(
+                    CONF_MAX_CONSECUTIVE_FAILURES,
+                    default=options.get(
+                        CONF_MAX_CONSECUTIVE_FAILURES,
+                        DEFAULT_MAX_CONSECUTIVE_FAILURES,
+                    ),
+                ): cv.positive_int,
+            }
         )
+
+        return self.async_show_form(step_id="init", data_schema=schema)

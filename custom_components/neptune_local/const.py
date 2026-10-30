@@ -2,32 +2,28 @@
 
 DOMAIN = "neptun_local"
 
+# Configuration keys
 CONF_HOST = "host"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_DEBUG = "debug"
+CONF_RETRY_ATTEMPTS = "retry_attempts"
+CONF_RETRY_DELAY = "retry_delay"
+CONF_MAX_CONSECUTIVE_FAILURES = "max_consecutive_failures"
 
+# Defaults
 DEFAULT_PORT = 6350
-DEFAULT_SCAN_INTERVAL = 120  # seconds
+DEFAULT_SCAN_INTERVAL = 120
 DEFAULT_DEBUG = False
+DEFAULT_RETRY_ATTEMPTS = 2
+DEFAULT_RETRY_DELAY = 8
+DEFAULT_MAX_CONSECUTIVE_FAILURES = 3
 
-# Resilience
-SOCKET_TIMEOUT = 8            # seconds per socket operation
-RETRY_ATTEMPTS_PER_CYCLE = 2  # attempts inside one update cycle
-RETRY_DELAY = 8               # seconds between attempts inside a cycle
-MAX_CONSECUTIVE_FAILURES = 3  # cycles before entities become Unavailable
-
-# Packet types from neptun.py
-PACKET_WHOIS = 0x49
+# Protocol constants
 PACKET_SYSTEM_STATE = 0x52
-PACKET_COUNTER_NAME = 0x63
-PACKET_COUNTER_STATE = 0x43
-PACKET_SENSOR_NAME = 0x4E
-PACKET_SENSOR_STATE = 0x53
-PACKET_BACK_STATE = 0x42
-PACKET_RECONNECT = 0x57
-PACKET_SET_SYSTEM_STATE = 0x57
-
-BROADCAST_PORT = 6350
-BROADCAST_ADDRESS = "255.255.255.255"
-SERVER_PORT = 6350
 SOCKET_BUFSIZE = 1024
+SOCKET_TIMEOUT = 8
+
+# Retry logic (values are overridden by config)
+RETRY_ATTEMPTS_PER_CYCLE = DEFAULT_RETRY_ATTEMPTS
+RETRY_DELAY = DEFAULT_RETRY_DELAY
+MAX_CONSECUTIVE_FAILURES = DEFAULT_MAX_CONSECUTIVE_FAILURES

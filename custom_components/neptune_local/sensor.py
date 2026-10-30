@@ -1,60 +1,21 @@
-"""Sensor platform for Neptun Local."""
-
+"""Sensor platform for Neptun Local integration."""
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+import logging
+from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorEntityDescription,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, SIGNAL_STRENGTH_DECIBELS
+from homeassistant.const import CONNECTION_NETWORK_MAC
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import DOMAIN
 from .coordinator import NeptunCoordinator
-from .entity import NeptunEntity
 
-
-@dataclass(frozen=True, kw_only=True)
-class NeptunSensorDescription(SensorEntityDescription):
-    """Describe a Neptun sensor."""
-    value_fn: Callable[[dict], float | int | str | None]
-
-
-SENSOR_TYPES: tuple[NeptunSensorDescription, ...] = (
-    NeptunSensorDescription(
-        key="status",
-        name="Status",
-        icon="mdi:water-alert",
-        value_fn=lambda d: d.get("status_name"),
-    ),
-    NeptunSensorDescription(
-        key="valve_state",
-        name="Valve state",
-        icon="mdi:valve",
-        value_fn=lambda d: "open" if d.get("valve_state_open") else "closed",
-    ),
-    NeptunSensorDescription(
-        key="sensor_count",
-        name="Wireless sensor count",
-        icon="mdi:access-point",
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.get("sensor_count"),
-    ),
-    NeptunSensorDescription(
-        key="relay_count",
-        name="Relay count",
-        icon="mdi:electric-switch",
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.get("relay_count"),
-    ),
-)
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -62,106 +23,179 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Neptun sensors from a config entry."""
+    """Set up Neptun sensors."""
     coordinator: NeptunCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entities: list[SensorEntity] = []
 
-    entities: list[NeptunSensor] = [
-        NeptunSensor(coordinator, description) for description in SENSOR_TYPES
-    ]
+    # Основные сенсоры системы
+    entities.append(NeptunStatusSensor(coordinator, entry))
+    entities.append(NeptunValveSensor(coordinator, entry))
+    entities.append(NeptunSensorCountSensor(coordinator, entry))
+    entities.append(NeptunRelayCountSensor(coordinator, entry))
 
-    # Add sensors for each line (wired and wireless)
+    # Сенсоры линий (счётчики и беспроводные датчики)
     if coordinator.data:
         for line_id, line_data in coordinator.data.get("lines", {}).items():
-            if "value" in line_data:  # counter
-                entities.append(
-                    NeptunLineSensor(
-                        coordinator,
-                        line_id,
-                        "value",
-                        f"{line_data.get('name', line_id)} value",
-                        icon="mdi:counter",
-                        state_class=SensorStateClass.TOTAL_INCREASING,
-                    )
-                )
-            if "signal" in line_data:  # wireless sensor
-                entities.append(
-                    NeptunLineSensor(
-                        coordinator,
-                        line_id,
-                        "signal",
-                        f"{line_data.get('name', line_id)} signal",
-                        icon="mdi:signal",
-                        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
-                        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS,
-                    )
-                )
-            if "battery" in line_data:  # wireless sensor battery
-                entities.append(
-                    NeptunLineSensor(
-                        coordinator,
-                        line_id,
-                        "battery",
-                        f"{line_data.get('name', line_id)} battery",
-                        icon="mdi:battery",
-                        device_class=SensorDeviceClass.BATTERY,
-                        native_unit_of_measurement=PERCENTAGE,
-                    )
-                )
+            if line_data.get("type") == "counter":
+                entities.append(NeptunCounterSensor(coordinator, entry, line_id))
+            if line_data.get("wire") is False:  # беспроводной датчик
+                entities.append(NeptunSignalSensor(coordinator, entry, line_id))
+                entities.append(NeptunBatterySensor(coordinator, entry, line_id))
 
-    async_add_entities(entities)
+    async_add_entities(entities, update_before_add=True)
 
 
-class NeptunSensor(NeptunEntity, SensorEntity):
-    """Representation of a Neptun sensor."""
+class NeptunBaseSensor(CoordinatorEntity[NeptunCoordinator], SensorEntity):
+    """Base class for Neptun sensors."""
 
-    entity_description: NeptunSensorDescription
+    _attr_has_entity_name = True
 
     def __init__(
         self,
         coordinator: NeptunCoordinator,
-        description: NeptunSensorDescription,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator, description.key)
-        self.entity_description = description
-        self._attr_name = description.name
-
-    @property
-    def native_value(self):
-        """Return the sensor value."""
-        if self.coordinator.data is None:
-            return None
-        return self.entity_description.value_fn(self.coordinator.data)
-
-
-class NeptunLineSensor(NeptunEntity, SensorEntity):
-    """Sensor for a specific line (sensor or counter)."""
-
-    def __init__(
-        self,
-        coordinator: NeptunCoordinator,
-        line_id: str,
-        data_key: str,
+        entry: ConfigEntry,
+        key: str,
         name: str,
-        icon: str | None = None,
-        device_class: SensorDeviceClass | None = None,
-        state_class: SensorStateClass | None = None,
-        native_unit_of_measurement: str | None = None,
     ) -> None:
-        """Initialize the line sensor."""
-        super().__init__(coordinator, f"{line_id}_{data_key}")
-        self._line_id = line_id
-        self._data_key = data_key
+        super().__init__(coordinator)
+        self._entry = entry
+        self._key = key
         self._attr_name = name
-        self._attr_icon = icon
-        self._attr_device_class = device_class
-        self._attr_state_class = state_class
-        self._attr_native_unit_of_measurement = native_unit_of_measurement
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
 
     @property
-    def native_value(self):
-        """Return the value from the line data."""
-        if self.coordinator.data is None:
-            return None
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        data = self.coordinator.data or {}
+        mac = data.get("mac")
+        info = DeviceInfo(
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            name=data.get("device_name", "Neptun ProW+"),
+            manufacturer="Neptun",
+            model=data.get("device_type", "ProW+"),
+            sw_version=data.get("version"),
+        )
+        if mac:
+            info["connections"] = {(CONNECTION_NETWORK_MAC, mac)}
+            info["serial_number"] = mac  # используем MAC как серийный номер
+        return info
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success
+
+
+class NeptunStatusSensor(NeptunBaseSensor):
+    """Overall system status sensor."""
+
+    _attr_icon = "mdi:shield-check"
+
+    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "status", "Status")
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("status_name")
+
+
+class NeptunValveSensor(NeptunBaseSensor):
+    """Main valve state sensor."""
+
+    _attr_icon = "mdi:valve"
+
+    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "valve_state", "Valve state")
+
+    @property
+    def native_value(self) -> str | None:
+        return "open" if self.coordinator.data.get("valve_state_open") else "closed"
+
+
+class NeptunSensorCountSensor(NeptunBaseSensor):
+    """Wireless sensor count."""
+
+    _attr_icon = "mdi:access-point"
+    _attr_native_unit_of_measurement = "pcs"
+
+    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "sensor_count", "Wireless sensors")
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("sensor_count")
+
+
+class NeptunRelayCountSensor(NeptunBaseSensor):
+    """Relay count."""
+
+    _attr_icon = "mdi:electric-switch"
+    _attr_native_unit_of_measurement = "pcs"
+
+    def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "relay_count", "Relays")
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("relay_count")
+
+
+class NeptunCounterSensor(NeptunBaseSensor):
+    """Counter value for a wired line."""
+
+    _attr_icon = "mdi:counter"
+    _attr_state_class = SensorDeviceClass.WATER
+    _attr_native_unit_of_measurement = "m³"
+
+    def __init__(
+        self, coordinator: NeptunCoordinator, entry: ConfigEntry, line_id: str
+    ) -> None:
+        super().__init__(
+            coordinator, entry, f"{line_id}_value", f"{line_id.capitalize()} counter"
+        )
+        self._line_id = line_id
+
+    @property
+    def native_value(self) -> int | None:
         line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
-        return line.get(self._data_key)
+        return line.get("value")
+
+
+class NeptunSignalSensor(NeptunBaseSensor):
+    """Signal level for a wireless sensor."""
+
+    _attr_icon = "mdi:signal"
+    _attr_native_unit_of_measurement = "dB"
+
+    def __init__(
+        self, coordinator: NeptunCoordinator, entry: ConfigEntry, line_id: str
+    ) -> None:
+        super().__init__(
+            coordinator, entry, f"{line_id}_signal", f"{line_id.capitalize()} signal"
+        )
+        self._line_id = line_id
+
+    @property
+    def native_value(self) -> int | None:
+        line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
+        return line.get("signal")
+
+
+class NeptunBatterySensor(NeptunBaseSensor):
+    """Battery level for a wireless sensor."""
+
+    _attr_icon = "mdi:battery"
+    _attr_native_unit_of_measurement = "%"
+    _attr_device_class = SensorDeviceClass.BATTERY
+
+    def __init__(
+        self, coordinator: NeptunCoordinator, entry: ConfigEntry, line_id: str
+    ) -> None:
+        super().__init__(
+            coordinator, entry, f"{line_id}_battery", f"{line_id.capitalize()} battery"
+        )
+        self._line_id = line_id
+
+    @property
+    def native_value(self) -> int | None:
+        line = self.coordinator.data.get("lines", {}).get(self._line_id, {})
+        return line.get("battery")
