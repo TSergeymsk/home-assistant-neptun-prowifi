@@ -93,6 +93,10 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @classmethod
     def _build_packet(cls, packet_type: int, payload: bytes = b"") -> bytes:
+        # ВАЖНО: Для GET-запросов протокол требует 2 байта длины (00 00).
+        # Если payload пустой (запрос данных), подставляем b"\x00\x00".
+        if len(payload) == 0:
+            payload = b"\x00\x00"
         data = bytearray([2, 84, 81, packet_type]) + payload
         return bytes(data + cls._crc16(data))
 
@@ -137,6 +141,7 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         sock = self._connect()
         try:
             device: dict[str, Any] = {"lines": {}}
+            
             raw = self._request(sock, self._build_packet(PACKET_SYSTEM_STATE))
             self._parse_system_state(raw, device)
 
@@ -155,37 +160,53 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _parse_system_state(self, data: bytes, device: dict[str, Any]) -> None:
         """Parse PACKET_SYSTEM_STATE (0x52)."""
-        if len(data) < 14:
+        if len(data) < 8:
             self._log_decoded("system_state", "packet too short")
             return
+            
         offset = 4
-        tag = data[offset]
-        offset += 3  # Skip tag and size
-        if tag == 0x53:
-            device["valve_state_open"] = data[offset] == 1
-            device["sensor_count"] = data[offset + 1]
-            device["relay_count"] = data[offset + 2]
-            device["flag_dry"] = data[offset + 3] == 1
-            device["flag_cl_valve"] = data[offset + 4] == 1
-            device["line_in_config"] = data[offset + 5]
-            device["status"] = data[offset + 6]
-            device["status_name"] = self._decode_status(data[offset + 6])
+        payload_len = (data[offset] << 8) | data[offset + 1]
+        offset += 2
+        
+        if payload_len == 0:
+            self._log_decoded("system_state", "payload length is zero")
+            return
 
-            self._log_decoded("system.valve_state_open", device["valve_state_open"])
-            self._log_decoded("system.sensor_count", device["sensor_count"])
-            self._log_decoded("system.relay_count", device["relay_count"])
-            self._log_decoded("system.flag_dry", device["flag_dry"])
-            self._log_decoded("system.status_name", device["status_name"])
+        while offset < len(data) - 2:
+            tag = data[offset]
+            offset += 1
+            tag_size = (data[offset] << 8) | data[offset + 1]
+            offset += 2
+
+            if tag == 0x53:
+                device["valve_state_open"] = data[offset] == 1
+                device["sensor_count"] = data[offset + 1]
+                device["relay_count"] = data[offset + 2]
+                device["flag_dry"] = data[offset + 3] == 1
+                device["flag_cl_valve"] = data[offset + 4] == 1
+                device["line_in_config"] = data[offset + 5]
+                device["status"] = data[offset + 6]
+                device["status_name"] = self._decode_status(data[offset + 6])
+
+                self._log_decoded("system.valve_state_open", device["valve_state_open"])
+                self._log_decoded("system.sensor_count", device["sensor_count"])
+                self._log_decoded("system.relay_count", device["relay_count"])
+                self._log_decoded("system.flag_dry", device["flag_dry"])
+                self._log_decoded("system.status_name", device["status_name"])
+                
+            offset += tag_size
 
     def _parse_background_status(self, data: bytes, device: dict[str, Any]) -> None:
         """Parse PACKET_BACK_STATE (0x42)."""
         if len(data) < 8:
             self._log_decoded("background_status", "packet too short")
             return
+            
         offset = 4
-        tag = data[offset]
-        offset += 3
-        if tag == 0x42:
+        payload_len = (data[offset] << 8) | data[offset + 1]
+        offset += 2
+        
+        if payload_len > 0:
             device["status"] = data[offset]
             device["status_name"] = self._decode_status(data[offset])
             self._log_decoded("background.status_name", device["status_name"])
@@ -194,54 +215,59 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Parse PACKET_SENSOR_STATE (0x53)."""
         if len(data) < 8:
             return
+            
         offset = 4
-        tag = data[offset]
-        offset += 3
-        if tag == 0x53:
-            idx = 0
-            # In Neptun, wireless lines typically start at index 4
-            # (0-3 are reserved for wired lines).
-            # We dynamically name them so they don't conflict.
-            while offset < len(data) - 2:
-                line = device["lines"].setdefault(f"line{idx + 4}", {})
-                line["signal"] = data[offset]
-                line["line"] = data[offset + 1]
-                line["battery"] = data[offset + 2]
-                line["state"] = data[offset + 3]
-                line["wire"] = False
+        payload_len = (data[offset] << 8) | data[offset + 1]
+        offset += 2
+        
+        if payload_len == 0:
+            return
 
-                self._log_decoded(f"line{idx+4}.signal", line["signal"])
-                self._log_decoded(f"line{idx+4}.battery", line["battery"])
-                self._log_decoded(f"line{idx+4}.state", line["state"])
+        idx = 0
+        while offset < len(data) - 2:
+            line = device["lines"].setdefault(f"line{idx + 4}", {})
+            line["signal"] = data[offset]
+            line["line"] = data[offset + 1]
+            line["battery"] = data[offset + 2]
+            line["state"] = data[offset + 3]
+            line["wire"] = False
 
-                offset += 4
-                idx += 1
+            self._log_decoded(f"line{idx+4}.signal", line["signal"])
+            self._log_decoded(f"line{idx+4}.battery", line["battery"])
+            self._log_decoded(f"line{idx+4}.state", line["state"])
+
+            offset += 4
+            idx += 1
 
     def _parse_counter_state(self, data: bytes, device: dict[str, Any]) -> None:
         """Parse PACKET_COUNTER_STATE (0x43)."""
         if len(data) < 8:
             return
+            
         offset = 4
-        tag = data[offset]
-        offset += 3
-        if tag == 0x43:
-            idx = 0
-            while offset < len(data) - 2:
-                line = device["lines"].setdefault(f"line{idx}", {})
-                value = (
-                    (data[offset] << 24) | (data[offset + 1] << 16) |
-                    (data[offset + 2] << 8) | data[offset + 3]
-                )
-                line["value"] = value
-                line["step"] = data[offset + 4]
-                line["type"] = "counter"
-                line["wire"] = True
+        payload_len = (data[offset] << 8) | data[offset + 1]
+        offset += 2
+        
+        if payload_len == 0:
+            return
 
-                self._log_decoded(f"line{idx}.counter_value", value)
-                self._log_decoded(f"line{idx}.counter_step", line["step"])
+        idx = 0
+        while offset < len(data) - 2:
+            line = device["lines"].setdefault(f"line{idx}", {})
+            value = (
+                (data[offset] << 24) | (data[offset + 1] << 16) |
+                (data[offset + 2] << 8) | data[offset + 3]
+            )
+            line["value"] = value
+            line["step"] = data[offset + 4]
+            line["type"] = "counter"
+            line["wire"] = True
 
-                offset += 5
-                idx += 1
+            self._log_decoded(f"line{idx}.counter_value", value)
+            self._log_decoded(f"line{idx}.counter_step", line["step"])
+
+            offset += 5
+            idx += 1
 
     @staticmethod
     def _decode_status(status: int) -> str:
@@ -275,6 +301,7 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cl_valve = current.get("flag_cl_valve", False)
         line_config = current.get("line_in_config", 0)
 
+        # Пакет управления имеет ненулевой payload, длина уже включена в массив
         payload = bytearray([0, 7, 0x53, 0, 4, 0, 0, 0, 0])
         if valve:
             payload[5] = 1
