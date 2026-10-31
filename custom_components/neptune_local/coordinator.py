@@ -367,7 +367,49 @@ class NeptunCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return ",".join(parts)
 
     async def async_set_valve(self, is_open: bool) -> None:
+        """Send valve command and wait for the device to reach the target state."""
+        # Отправляем команду на контроллер
         await self._async_send_settings(valve_open=is_open)
+        
+        target_state = is_open
+        timeout = 30  # Максимальное время ожидания (в секундах)
+        interval = 2  # Интервал между опросами (в секундах)
+        
+        start_time = asyncio.get_event_loop().time()
+        
+        _LOGGER.debug(
+            "[Neptun %s] Waiting for valve to reach state: %s", 
+            self.host, target_state
+        )
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            # Ждем перед следующим опросом, давая крану время начать движение
+            await asyncio.sleep(interval)
+            
+            try:
+                # Принудительно запрашиваем свежие данные у контроллера
+                await self.async_request_refresh()
+            except Exception as err:
+                # Если произошла ошибка сети (таймаут), просто пробуем снова
+                _LOGGER.debug(
+                    "[Neptun %s] Poll during valve wait failed: %s", 
+                    self.host, err
+                )
+                continue
+                
+            # Проверяем, достиг ли кран целевого состояния
+            if self.data and self.data.get("valve_state_open") == target_state:
+                _LOGGER.info(
+                    "[Neptun %s] Valve successfully reached target state: %s",
+                    self.host, target_state
+                )
+                return
+                
+        # Если цикл завершился, а состояние не изменилось — пишем предупреждение
+        _LOGGER.warning(
+            "[Neptun %s] Timeout waiting for valve to reach target state: %s",
+            self.host, target_state
+        )
 
     async def async_set_cleaning_mode(self, enabled: bool) -> None:
         await self._async_send_settings(cleaning=enabled)

@@ -76,14 +76,19 @@ class NeptunMainValve(NeptunBaseValve):
 
     _attr_device_class = ValveDeviceClass.WATER
     _attr_supported_features = ValveEntityFeature.OPEN | ValveEntityFeature.CLOSE
-    _attr_reports_position = False  # <-- Критически важный атрибут
+    _attr_reports_position = False
 
     def __init__(self, coordinator: NeptunCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "main_valve_entity", "Main valve")
+        self._optimistic_state: bool | None = None
 
     @property
     def is_closed(self) -> bool | None:
         """Return True if the valve is closed."""
+        # Если есть оптимистичное состояние (пока идет опрос), возвращаем его
+        if self._optimistic_state is not None:
+            return self._optimistic_state
+            
         state = self.coordinator.data.get("valve_state_open")
         if state is None:
             return None
@@ -91,8 +96,26 @@ class NeptunMainValve(NeptunBaseValve):
 
     async def async_open_valve(self, **kwargs: Any) -> None:
         """Open the valve."""
-        await self.coordinator.async_set_valve(True)
+        # Оптимистично устанавливаем состояние (False = открыт)
+        self._optimistic_state = False 
+        self.async_write_ha_state()
+        
+        try:
+            # Ждем, пока координатор не получит подтверждение от устройства
+            await self.coordinator.async_set_valve(True)
+        finally:
+            # Сбрасываем оптимистичное состояние, теперь HA берет данные из координатора
+            self._optimistic_state = None
+            self.async_write_ha_state()
 
     async def async_close_valve(self, **kwargs: Any) -> None:
         """Close the valve."""
-        await self.coordinator.async_set_valve(False)
+        # Оптимистично устанавливаем состояние (True = закрыт)
+        self._optimistic_state = True
+        self.async_write_ha_state()
+        
+        try:
+            await self.coordinator.async_set_valve(False)
+        finally:
+            self._optimistic_state = None
+            self.async_write_ha_state()
